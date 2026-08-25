@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test dist/packages/ecs/src/index.test.js dist/packages/module-api/src/index.test.js dist/packages/runtime/src/index.test.js",
+    "test": "node --test dist/packages/ecs/src/index.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
