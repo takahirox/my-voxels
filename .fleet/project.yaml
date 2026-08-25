@@ -1,0 +1,65 @@
+schema_version: 2
+commands:
+  build:
+    argv: ["npm", "run", "build"]
+    cwd: "."
+  test:
+    argv: ["npm", "test"]
+    cwd: "."
+  typecheck:
+    argv: ["npm", "run", "typecheck"]
+    cwd: "."
+rules: []
+paths:
+  writable:
+    - "package.json"
+    - "tsconfig.json"
+    - "packages/**"
+    - "tests/**"
+    - "scripts/**"
+  protected:
+    - ".git/**"
+    - ".fleet/**"
+    - ".env*"
+    - "README.md"
+    - "docs/**"
+    - "LICENSE"
+    - "tools/fleet-npm"
+  generated:
+    - "node_modules/**"
+    - "dist/**"
+    - "coverage/**"
+verification:
+  required: ["build", "test", "typecheck"]
+  evidence_freshness: "exact_diff"
+  review:
+    required: true
+    block_severities: ["critical", "high"]
+network:
+  mode: "restricted"
+  https_domains: ["registry.npmjs.org"]
+  ports: [443]
+install:
+  ecosystems: ["node_project"]
+  existing_lock: "allow"
+  new_dependency: "deny"
+  manifest_lock_mutation: "deny"
+  lifecycle_scripts: "deny"
+  new_registry_domain: "deny"
+  host_global: "deny"
+approvals:
+  process_shell: "deny"
+  new_dependency: "deny"
+  manifest_lock_mutation: "deny"
+  lifecycle_scripts: "deny"
+  new_registry_domain: "deny"
+  promotion: "required"
+worker:
+  preferred: "codex_cli"
+  allowed: ["codex_cli"]
+budgets:
+  wall_seconds: 1800.0
+  worker_turns: 1
+  processes: 20
+  download_bytes: 0
+  artifact_bytes: 100000000
