@@ -38,6 +38,7 @@ packages/
   module-api/            # typed capabilities and module contracts
 
   net-protocol/          # transport-independent packets and codecs
+  net-transport-websocket/ # reference WebSocket transport
   net-server/            # authority, replication, interest management
   net-client/            # snapshots, interpolation, prediction bridge
   prediction/            # command history, reconciliation, replay
@@ -46,7 +47,9 @@ packages/
   voxel-streaming/       # chunk demand, loading, unloading
   voxel-meshing/         # meshing contracts + reference mesher
   voxel-lighting/        # lighting contracts + reference light solver
+  voxel-collision/       # canonical voxel collision queries
   voxel-editing/         # predicted/authoritative block commands
+  voxel-persistence/     # canonical chunk persistence adapters
 
   input-browser/         # keyboard, mouse, touch, gamepad
   renderer-three/        # optional Three.js renderer
@@ -90,10 +93,38 @@ const server = createRuntime({
     persistence(),
   ],
 });
+
+await server.start();
+
+// Both client and server runtimes use the same lifecycle contract.
+await app.stop();
+await server.stop();
 ```
+
+Runtime construction is synchronous. Lifecycle hooks and external I/O may be
+asynchronous. `start()` and `stop()` are idempotent and follow the state machine
+defined in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#10-runtime-lifecycle-and-error-model).
+
+## Implementation gates
+
+The framework specification is normative before implementation. Milestone 0 may
+start only after the public primitive contracts, deterministic ordering graph,
+state ownership rules, atomic commit rules, capability resolution rules, command
+state machine, runtime/job failure contracts, and v0.1 package scope are reflected
+in the architecture tests.
+
+Later milestones have their own decision gates for prediction, voxel revisions,
+transport limits, and calibrated acceptance thresholds. See
+[`docs/ROADMAP.md`](docs/ROADMAP.md). Values that depend on target hardware or
+representative load are measured and recorded before their milestone gate; they
+are not silently chosen by an implementation.
 
 ## Core rule
 
 > Core defines how state is executed. Modules define what the game is.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full specification.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the core contracts,
+[`docs/NETWORKING.md`](docs/NETWORKING.md) for command and transport semantics,
+[`docs/VOXELS.md`](docs/VOXELS.md) for chunk and revision semantics,
+[`docs/DECISIONS.md`](docs/DECISIONS.md) for accepted decisions, and
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for implementation gates.
