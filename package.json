@@ -8,9 +8,11 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build packages/visual-sandbox --outDir ../../dist/visual-sandbox --emptyOutDir",
     "test": "node --test dist/packages/*/src/index.test.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "vite packages/visual-sandbox --host 127.0.0.1",
+    "preview": "vite preview packages/visual-sandbox --outDir ../../dist/visual-sandbox --host 127.0.0.1"
   },
   "devDependencies": {
     "@types/three": "0.185.4",

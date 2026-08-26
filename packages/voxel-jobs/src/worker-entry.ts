@@ -276,6 +276,10 @@ export function installVoxelWorkerEntry(scope: WorkerEntryScope): void {
 }
 
 const workerScope = globalThis as Partial<WorkerEntryScope>;
-if (typeof workerScope.postMessage === "function" && typeof workerScope.addEventListener === "function") {
+if (
+  typeof document === "undefined" &&
+  typeof workerScope.postMessage === "function" &&
+  typeof workerScope.addEventListener === "function"
+) {
   installVoxelWorkerEntry(workerScope as WorkerEntryScope);
 }

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#8bc6d9">
+    <title>My Voxels — 4×4 Sandbox</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="world" aria-label="Interactive voxel landscape"></canvas>
+      <header class="brand">
+        <p class="eyebrow">BROWSER SANDBOX / 4 × 4</p>
+        <h1>My Voxels</h1>
+        <p id="identity"></p>
+      </header>
+      <aside class="panel" aria-live="polite">
+        <div class="status-row"><strong id="status">Preparing landscape…</strong><span id="percent">0%</span></div>
+        <div class="progress"><i id="progress"></i></div>
+        <section class="metrics">
+          <div><span>FPS</span><b id="fps">—</b></div><div><span>Frame</span><b id="frame">—</b></div>
+          <div><span>Draw calls</span><b id="draws">0</b></div><div><span>Visible / loaded</span><b id="chunks">0 / 0</b></div>
+          <div><span>Vertices</span><b id="vertices">0</b></div><div><span>Triangles</span><b id="triangles">0</b></div>
+          <div><span>Workers</span><b id="workers">0</b></div><div><span>Time to visible</span><b id="ttv">—</b></div>
+          <div><span>Average job</span><b id="avg-job">—</b></div><div><span>Chunk ready</span><b id="avg-ready">—</b></div>
+          <div><span>Stale / cancelled / failed</span><b id="outcomes">0 / 0 / 0</b></div>
+        </section>
+        <section class="queues">
+          <span>Queued / running</span><code id="queue">terrain 0/0 · mesh 0/0 · lighting 0/0 · bake 0/0</code>
+          <span>Recent assignments</span><code id="assignments">Waiting for workers…</code>
+        </section>
+        <div class="toggles">
+          <label><input id="wireframe" type="checkbox"> Wireframe</label>
+          <label><input id="bounds" type="checkbox"> Chunk bounds</label>
+          <label><input id="fog" type="checkbox" checked> Fog</label>
+        </div>
+        <nav><a id="worker-link">Worker</a><a id="inline-link">Inline</a><a id="benchmark-link">Benchmark URL</a></nav>
+      </aside>
+      <footer>
+        <span><kbd>Drag</kbd> look</span><span><kbd>WASD</kbd> fly</span>
+        <span><kbd>Q/E</kbd> or <kbd>Shift/Space</kbd> descend / ascend</span>
+      </footer>
+      <div id="fatal" role="alert" hidden></div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
