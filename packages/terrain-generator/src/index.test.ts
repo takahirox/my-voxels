@@ -37,6 +37,32 @@ test("columns contain stone, soil, grass, optional water, then air", () => {
   }
 });
 
+test("height field stays bounded and locally smooth over positive and negative coordinates", () => {
+  for (const seed of [0n, 7n, 0xffff_ffff_ffff_ffffn]) {
+    let steepSteps = 0;
+    let steps = 0;
+    for (let z = -96; z <= 96; z += 3) {
+      for (let x = -96; x <= 96; x += 3) {
+        const height = terrainHeight(seed, x, z);
+        assert.ok(height >= 23 && height <= 38, `${height} at ${x},${z}`);
+        for (const [dx, dz] of [[1, 0], [0, 1]] as const) {
+          const difference = Math.abs(height - terrainHeight(seed, x + dx, z + dz));
+          assert.ok(difference <= 2, `step ${difference} at ${x},${z}`);
+          steepSteps += Number(difference === 2);
+          steps++;
+        }
+      }
+    }
+    assert.ok(steepSteps < steps / 20);
+  }
+});
+
+test("different seeds produce different smooth height fields", () => {
+  const first = Array.from({ length: 64 }, (_, index) => terrainHeight(100n, index % 8 - 4, Math.floor(index / 8) - 4));
+  const second = Array.from({ length: 64 }, (_, index) => terrainHeight(101n, index % 8 - 4, Math.floor(index / 8) - 4));
+  assert.notDeepEqual(first, second);
+});
+
 test("adjacent chunks use one global coordinate function at their seam", () => {
   const seed = 123456789n;
   const west = generateTerrain(seed, { x: -1, z: 2 }).blocks;
@@ -47,7 +73,7 @@ test("adjacent chunks use one global coordinate function at their seam", () => {
     const eastHeight = terrainHeight(seed, 0, globalZ);
     assert.equal(at(west, 15, westHeight, z), GRASS);
     assert.equal(at(east, 0, eastHeight, z), GRASS);
-    assert.ok(Math.abs(westHeight - eastHeight) <= 4);
+    assert.ok(Math.abs(westHeight - eastHeight) <= 2);
   }
 });
 

@@ -59,6 +59,30 @@ test("baking leaves mesh topology invariant and emits per-vertex RGB", () => {
   assert.deepEqual(mesh.indices, indices);
 });
 
+test("exposed vertical faces receive ambient light while AO still darkens them", () => {
+  const value = setup([[8, 40, 8, STONE]]);
+  const mesh = meshGreedy(value.input);
+  const vertical = Array.from({ length: mesh.vertexCount }, (_, vertex) => vertex)
+    .filter((vertex) => mesh.normals[vertex * 3] === 1);
+  assert.ok(vertical.length >= 2);
+  const brightVertex = vertical[0]!;
+  const occludedVertex = vertical[1]!;
+  mesh.ao[brightVertex] = 0;
+  mesh.ao[occludedVertex] = 3;
+
+  const result = bakeVertexLight(mesh, computeSunlight(value.input));
+  assert.equal(result.status, "baked");
+  if (result.status !== "baked") throw new Error("bake failed");
+  const brightOffset = brightVertex * 3;
+  const occludedOffset = occludedVertex * 3;
+  assert.ok(result.colors[brightOffset]! > 0);
+  assert.ok(result.colors[brightOffset + 1]! > 0);
+  assert.ok(result.colors[brightOffset + 2]! > 0);
+  assert.ok(result.colors[occludedOffset]! < result.colors[brightOffset]!);
+  assert.ok(result.colors[occludedOffset + 1]! < result.colors[brightOffset + 1]!);
+  assert.ok(result.colors[occludedOffset + 2]! < result.colors[brightOffset + 2]!);
+});
+
 test("mismatched and stale revision sets are rejected as obsolete", () => {
   const first = setup([[8, 40, 8, STONE]]);
   const mesh = meshGreedy(first.input);

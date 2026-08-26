@@ -20,6 +20,7 @@ import {
 } from "../../voxel-jobs/src/worker-entry.js";
 import { ChunkCandidate, VoxelStorage, type ChunkCoord, type ChunkSnapshot } from "../../voxel-storage/src/index.js";
 import type { VoxelMesh } from "../../voxel-mesher/src/index.js";
+import { terrainHeight, WATER_LEVEL } from "../../terrain-generator/src/index.js";
 import { chunkKey, cloneMeshInputWire, deterministicChunks, distanceFromCamera, parseSandboxConfig } from "./config.js";
 import { FrameSampler, average, formatCount, formatDuration } from "./stats.js";
 
@@ -238,16 +239,18 @@ const leafMaterial = new MeshLambertMaterial({ color: 0x568f50 });
 const plantMaterial = new MeshLambertMaterial({ color: 0xa7c95f });
 for (let index = 0; index < 22; index++) {
   const x = -27 + rnd() * 54, z = -27 + rnd() * 54;
+  const surface = terrainHeight(config.seed, Math.floor(x), Math.floor(z));
+  if (surface < WATER_LEVEL) continue;
   if (index < 10) {
     const trunk = new Mesh(new CylinderGeometry(.45, .7, 5, 7), trunkMaterial);
-    trunk.position.set(x, 35, z);
+    trunk.position.set(x, surface + 3.5, z);
     const crown = new Mesh(new SphereGeometry(2.5 + rnd(), 7, 5), leafMaterial);
     crown.scale.y = 1.3;
-    crown.position.set(x, 39, z);
+    crown.position.set(x, surface + 7.5, z);
     props.add(trunk, crown);
   } else {
     const plant = new Mesh(new CylinderGeometry(0, .55, 2.5, 4), plantMaterial);
-    plant.position.set(x, 34, z);
+    plant.position.set(x, surface + 2.25, z);
     plant.rotation.y = rnd() * Math.PI;
     props.add(plant);
   }

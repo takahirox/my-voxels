@@ -25,25 +25,44 @@ function mix(value: bigint): bigint {
   return BigInt.asUintN(64, mixed ^ (mixed >> 31n));
 }
 
-function coordinateNoise(seed: bigint, x: number, z: number): number {
+function latticeNoise(seed: bigint, x: number, z: number): number {
   const packed = BigInt.asUintN(64, BigInt(x) * 0x9e37_79b9_7f4a_7c15n + BigInt(z) * 0xc2b2_ae3d_27d4_eb4fn);
   return Number(mix(seed ^ packed) & 0xffffn) / 0xffff;
+}
+
+function smooth(value: number): number {
+  return value * value * (3 - 2 * value);
+}
+
+function lerp(from: number, to: number, amount: number): number {
+  return from + (to - from) * amount;
+}
+
+function valueNoise(seed: bigint, x: number, z: number, scale: number): number {
+  const latticeX = Math.floor(x / scale);
+  const latticeZ = Math.floor(z / scale);
+  const tx = smooth(x / scale - latticeX);
+  const tz = smooth(z / scale - latticeZ);
+  const north = lerp(
+    latticeNoise(seed, latticeX, latticeZ),
+    latticeNoise(seed, latticeX + 1, latticeZ),
+    tx,
+  );
+  const south = lerp(
+    latticeNoise(seed, latticeX, latticeZ + 1),
+    latticeNoise(seed, latticeX + 1, latticeZ + 1),
+    tx,
+  );
+  return lerp(north, south, tz);
 }
 
 /** A deterministic global-coordinate height, independent of chunk generation order. */
 export function terrainHeight(seed: bigint, globalX: number, globalZ: number): number {
   requireSeed(seed);
   if (!Number.isSafeInteger(globalX) || !Number.isSafeInteger(globalZ)) throw new RangeError("terrain coordinates must be safe integers");
-  let rolling = 0;
-  let weight = 0;
-  for (let dz = -1; dz <= 1; dz++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const sampleWeight = dx === 0 && dz === 0 ? 4 : dx === 0 || dz === 0 ? 2 : 1;
-      rolling += coordinateNoise(seed, globalX + dx, globalZ + dz) * sampleWeight;
-      weight += sampleWeight;
-    }
-  }
-  return 22 + Math.floor((rolling / weight) * 17);
+  const broad = valueNoise(seed, globalX, globalZ, 32);
+  const detail = valueNoise(seed ^ 0xa076_1d64_78bd_642fn, globalX, globalZ, 13);
+  return 23 + Math.round((broad * 0.75 + detail * 0.25) * 15);
 }
 
 export function generateTerrain(seed: bigint, coord: ChunkCoord): ChunkCandidate {
