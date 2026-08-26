@@ -1,3 +1,5 @@
+export * from "./browser.js";
+
 export const VOXEL_JOB_TYPES = ["terrain", "mesh", "lighting", "bake"] as const;
 
 export type VoxelJobType = (typeof VOXEL_JOB_TYPES)[number];

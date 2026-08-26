@@ -3,14 +3,29 @@ import assert from "node:assert/strict";
 // @ts-expect-error Node types are supplied by the supported Node runtime.
 import test from "node:test";
 
+import { generateTerrain } from "../../terrain-generator/src/index.js";
 import {
+  BrowserWorkerExecutor,
+  BrowserWorkerPool,
   InlineVoxelExecutor,
   VoxelJobScheduler,
   calculateJobPriority,
+  collectTransferableArrayBuffers,
   compareJobPriority,
   createVoxelJob,
+  workerCountForHardwareConcurrency,
   type VoxelJob,
+  type WorkerErrorEvent,
+  type WorkerLike,
+  type WorkerMessageEvent,
 } from "./index.js";
+import {
+  dispatchVoxelWorkerRequest,
+  type TerrainJobInputWire,
+  type TerrainResultWire,
+} from "./worker-entry.js";
+
+const signal = new AbortController().signal;
 
 function job(
   id: string,
@@ -223,4 +238,164 @@ test("queued and running cancellation settle as cancelled", async () => {
   assert.deepEqual(await queued, { status: "cancelled" });
   assert.deepEqual(await running, { status: "cancelled" });
   assert.equal(scheduler.metrics().cancelled, 2);
+});
+
+class FakeWorker implements WorkerLike {
+  readonly messages: { message: unknown; transfer: readonly ArrayBuffer[] }[] = [];
+  readonly messageListeners = new Set<(event: WorkerMessageEvent) => void>();
+  readonly errorListeners = new Set<(event: WorkerErrorEvent) => void>();
+  terminated = 0;
+  respond?: (message: Record<string, unknown>) => void;
+
+  postMessage(message: object, transfer: readonly ArrayBuffer[] = []): void {
+    this.messages.push({ message, transfer });
+    this.respond?.(message as Record<string, unknown>);
+  }
+
+  addEventListener(type: "message" | "error", listener: ((event: WorkerMessageEvent) => void) | ((event: WorkerErrorEvent) => void)): void {
+    if (type === "message") this.messageListeners.add(listener as (event: WorkerMessageEvent) => void);
+    else this.errorListeners.add(listener as (event: WorkerErrorEvent) => void);
+  }
+
+  removeEventListener(type: "message" | "error", listener: ((event: WorkerMessageEvent) => void) | ((event: WorkerErrorEvent) => void)): void {
+    if (type === "message") this.messageListeners.delete(listener as (event: WorkerMessageEvent) => void);
+    else this.errorListeners.delete(listener as (event: WorkerErrorEvent) => void);
+  }
+
+  emitMessage(data: unknown): void {
+    for (const listener of this.messageListeners) listener({ data });
+  }
+
+  emitError(error: unknown): void {
+    for (const listener of this.errorListeners) listener({ error });
+  }
+
+  terminate(): void {
+    this.terminated++;
+  }
+}
+
+function browserJob(id: string, type: "terrain" | "mesh" | "lighting" | "bake", input: unknown): VoxelJob {
+  return createVoxelJob({
+    id, type, revision: {}, visible: true, distance: 0, enqueuedAt: 0, sequence: 0,
+    input, commit: () => undefined,
+  });
+}
+
+test("browser executor correlates out-of-order responses by unique request id", async () => {
+  const worker = new FakeWorker();
+  const executor = new BrowserWorkerExecutor(worker);
+  const first = executor.execute(browserJob("first", "terrain", { value: 1 }), { signal });
+  const second = executor.execute(browserJob("second", "mesh", { value: 2 }), { signal });
+  const firstRequest = worker.messages[0]!.message as { id: string };
+  const secondRequest = worker.messages[1]!.message as { id: string };
+  assert.notEqual(firstRequest.id, secondRequest.id);
+  worker.emitMessage({ id: secondRequest.id, ok: true, result: "second" });
+  worker.emitMessage({ id: firstRequest.id, ok: true, result: "first" });
+  assert.deepEqual(await Promise.all([first, second]), ["first", "second"]);
+  executor.dispose();
+});
+
+test("transfer collection recursively deduplicates typed-array backing buffers", async () => {
+  const shared = new ArrayBuffer(16);
+  const other = new Uint8Array(4);
+  const value = {
+    first: new Uint8Array(shared),
+    nested: [new Uint16Array(shared), { view: new DataView(shared), other }],
+  };
+  assert.deepEqual(collectTransferableArrayBuffers(value), [shared, other.buffer]);
+  const worker = new FakeWorker();
+  const executor = new BrowserWorkerExecutor(worker);
+  const pending = executor.execute(browserJob("transfer", "terrain", value), { signal });
+  assert.deepEqual(worker.messages[0]!.transfer, [shared, other.buffer]);
+  const request = worker.messages[0]!.message as { id: string };
+  worker.emitMessage({ id: request.id, ok: true, result: null });
+  await pending;
+  executor.dispose();
+});
+
+test("browser executor rejects worker failures, protocol failures, errors, and dispose", async () => {
+  const failedWorker = new FakeWorker();
+  const failedExecutor = new BrowserWorkerExecutor(failedWorker);
+  const failed = failedExecutor.execute(browserJob("failed", "terrain", {}), { signal });
+  const failedId = (failedWorker.messages[0]!.message as { id: string }).id;
+  failedWorker.emitMessage({ id: failedId, ok: false, error: { name: "RangeError", message: "bad input" } });
+  await assert.rejects(failed, { name: "RangeError", message: "bad input" });
+
+  const protocol = failedExecutor.execute(browserJob("protocol", "mesh", {}), { signal });
+  failedWorker.emitMessage({ nope: true });
+  await assert.rejects(protocol, /protocol error/);
+  failedExecutor.dispose();
+
+  const errorWorker = new FakeWorker();
+  const errorExecutor = new BrowserWorkerExecutor(errorWorker);
+  const errored = errorExecutor.execute(browserJob("errored", "lighting", {}), { signal });
+  errorWorker.emitError(new Error("worker crashed"));
+  await assert.rejects(errored, /worker crashed/);
+  errorExecutor.dispose();
+
+  const disposeWorker = new FakeWorker();
+  const disposeExecutor = new BrowserWorkerExecutor(disposeWorker);
+  const pending = disposeExecutor.execute(browserJob("pending", "bake", {}), { signal });
+  disposeExecutor.dispose();
+  disposeExecutor.dispose();
+  await assert.rejects(pending, /disposed/);
+  await assert.rejects(disposeExecutor.execute(browserJob("late", "terrain", {}), { signal }), /disposed/);
+  assert.equal(disposeWorker.terminated, 1);
+  assert.equal(disposeWorker.messageListeners.size, 0);
+  assert.equal(disposeWorker.errorListeners.size, 0);
+});
+
+test("browser pool distributes every job type round-robin and sizes conservatively", async () => {
+  const workers = [new FakeWorker(), new FakeWorker(), new FakeWorker()];
+  for (let index = 0; index < workers.length; index++) {
+    const worker = workers[index]!;
+    worker.respond = (request) => queueMicrotask(() => worker.emitMessage({
+      id: request.id,
+      ok: true,
+      result: index,
+    }));
+  }
+  const pool = new BrowserWorkerPool(workers);
+  assert.equal(pool.count, 3);
+  const types = ["terrain", "mesh", "lighting", "bake", "terrain"] as const;
+  const results = await Promise.all(types.map((type, index) =>
+    pool.execute(browserJob(String(index), type, {}), { signal })));
+  assert.deepEqual(results, [0, 1, 2, 0, 1]);
+  assert.deepEqual(workers.map((worker) => worker.messages.length), [2, 2, 1]);
+  assert.equal(workerCountForHardwareConcurrency(undefined), 1);
+  assert.equal(workerCountForHardwareConcurrency(1), 1);
+  assert.equal(workerCountForHardwareConcurrency(2), 1);
+  assert.equal(workerCountForHardwareConcurrency(4), 2);
+  assert.equal(workerCountForHardwareConcurrency(64), 6);
+  pool.dispose();
+  pool.dispose();
+  assert.deepEqual(workers.map((worker) => worker.terminated), [1, 1, 1]);
+});
+
+test("inline and fake browser-worker paths produce equivalent terrain output", async () => {
+  const input: TerrainJobInputWire = { seed: "42", coord: { x: -1, z: 2 } };
+  const terrainJob = browserJob("terrain-equivalence", "terrain", input);
+  const inline = new InlineVoxelExecutor({
+    terrain: (value) => {
+      const wire = value.input as TerrainJobInputWire;
+      const candidate = generateTerrain(BigInt(wire.seed), wire.coord);
+      const result: TerrainResultWire = { coord: candidate.coord, blocks: candidate.blocks };
+      return result;
+    },
+  });
+  const worker = new FakeWorker();
+  worker.respond = (request) => queueMicrotask(() => {
+    try {
+      worker.emitMessage({ id: request.id, ok: true, result: dispatchVoxelWorkerRequest(request as never) });
+    } catch (error) {
+      worker.emitMessage({ id: request.id, ok: false, error: { message: String(error) } });
+    }
+  });
+  const browser = new BrowserWorkerExecutor(worker);
+  const expected = await inline.execute<TerrainResultWire>(terrainJob, { signal });
+  const actual = await browser.execute<TerrainResultWire>(terrainJob, { signal });
+  assert.deepEqual(actual.coord, expected.coord);
+  assert.deepEqual(actual.blocks, expected.blocks);
+  browser.dispose();
 });
