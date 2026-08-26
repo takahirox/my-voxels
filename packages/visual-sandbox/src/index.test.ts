@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 // @ts-expect-error Node types are supplied by the supported Node runtime.
 import test from "node:test";
 
-import { cloneMeshInputWire, deterministicChunks, parseSandboxConfig } from "./config.js";
+import { applySandboxEdgeTreatment, cloneMeshInputWire, deterministicChunks, parseSandboxConfig } from "./config.js";
 import { average, formatCount, formatDuration } from "./stats.js";
 import type { MeshInputWire } from "../../voxel-jobs/src/worker-entry.js";
+import { AIR, CHUNK_VOLUME, STONE, voxelIndex } from "../../voxel-storage/src/index.js";
 
 test("sandbox query parsing has stable defaults and accepts deterministic options", () => {
   assert.deepEqual(parseSandboxConfig(""), { seed: 1234n, camera: "benchmark-1", executor: "worker" });
@@ -28,6 +29,21 @@ test("chunk list is deterministic and ordered by rows", () => {
     { x: -2, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 0 }, { x: 1, z: 0 },
     { x: -2, z: 1 }, { x: -1, z: 1 }, { x: 0, z: 1 }, { x: 1, z: 1 },
   ]);
+});
+
+test("sandbox edge treatment rounds and tapers the finite terrain without mutating its input", () => {
+  const blocks = new Uint16Array(CHUNK_VOLUME).fill(STONE);
+  const center = applySandboxEdgeTreatment({ x: 0, z: 0 }, blocks);
+  const corner = applySandboxEdgeTreatment({ x: 1, z: 1 }, blocks);
+
+  assert.notEqual(center, blocks);
+  assert.equal(blocks[voxelIndex({ x: 15, y: 63, z: 15 })], STONE);
+  assert.equal(center[voxelIndex({ x: 0, y: 63, z: 0 })], STONE);
+  assert.equal(corner[voxelIndex({ x: 15, y: 0, z: 15 })], AIR);
+  assert.equal(corner[voxelIndex({ x: 15, y: 63, z: 15 })], AIR);
+  assert.equal(corner[voxelIndex({ x: 0, y: 0, z: 0 })], AIR);
+  assert.equal(corner[voxelIndex({ x: 0, y: 20, z: 0 })], STONE);
+  assert.equal(corner[voxelIndex({ x: 0, y: 63, z: 0 })], AIR);
 });
 
 test("wire cloning preserves revisions without sharing transferable buffers", () => {
