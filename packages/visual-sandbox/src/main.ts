@@ -1,10 +1,9 @@
 import "./style.css";
 
 import {
-  ACESFilmicToneMapping, Box3, Box3Helper, BoxGeometry, Clock, Color,
-  CylinderGeometry, DirectionalLight, Fog, Group, HemisphereLight, MathUtils,
-  Mesh, MeshLambertMaterial, PerspectiveCamera, Scene, SRGBColorSpace,
-  SphereGeometry, Vector3, WebGLRenderer,
+  ACESFilmicToneMapping, Box3, Box3Helper, Clock, Color, DirectionalLight,
+  Fog, Group, HemisphereLight, MathUtils, PerspectiveCamera, Scene,
+  SRGBColorSpace, Vector3, WebGLRenderer,
 } from "three";
 
 import { ChunkRenderSink } from "../../renderer-three/src/index.js";
@@ -20,7 +19,6 @@ import {
 } from "../../voxel-jobs/src/worker-entry.js";
 import { ChunkCandidate, VoxelStorage, type ChunkCoord, type ChunkSnapshot } from "../../voxel-storage/src/index.js";
 import type { VoxelMesh } from "../../voxel-mesher/src/index.js";
-import { terrainHeight, WATER_LEVEL } from "../../terrain-generator/src/index.js";
 import { chunkKey, cloneMeshInputWire, deterministicChunks, distanceFromCamera, parseSandboxConfig } from "./config.js";
 import { FrameSampler, average, formatCount, formatDuration } from "./stats.js";
 
@@ -226,36 +224,6 @@ for (const coord of deterministicChunks()) {
   bounds.add(helper);
 }
 
-function random(seed: bigint): () => number {
-  let state = Number(seed & 0xffff_ffffn) || 1;
-  return () => ((state = Math.imul(state ^ state >>> 15, 1 | state), state ^= state + Math.imul(state ^ state >>> 7, 61 | state), ((state ^ state >>> 14) >>> 0) / 4294967296));
-}
-
-const props = new Group();
-scene.add(props);
-const rnd = random(config.seed);
-const trunkMaterial = new MeshLambertMaterial({ color: 0x73543a });
-const leafMaterial = new MeshLambertMaterial({ color: 0x568f50 });
-const plantMaterial = new MeshLambertMaterial({ color: 0xa7c95f });
-for (let index = 0; index < 22; index++) {
-  const x = -27 + rnd() * 54, z = -27 + rnd() * 54;
-  const surface = terrainHeight(config.seed, Math.floor(x), Math.floor(z));
-  if (surface < WATER_LEVEL) continue;
-  if (index < 10) {
-    const trunk = new Mesh(new CylinderGeometry(.45, .7, 5, 7), trunkMaterial);
-    trunk.position.set(x, surface + 3.5, z);
-    const crown = new Mesh(new SphereGeometry(2.5 + rnd(), 7, 5), leafMaterial);
-    crown.scale.y = 1.3;
-    crown.position.set(x, surface + 7.5, z);
-    props.add(trunk, crown);
-  } else {
-    const plant = new Mesh(new CylinderGeometry(0, .55, 2.5, 4), plantMaterial);
-    plant.position.set(x, surface + 2.25, z);
-    plant.rotation.y = rnd() * Math.PI;
-    props.add(plant);
-  }
-}
-
 let yaw = camera.rotation.y, pitch = camera.rotation.x, dragging = false;
 let previousX = 0, previousY = 0;
 const keys = new Set<string>();
@@ -355,8 +323,7 @@ function dispose(): void {
   canvas.removeEventListener("pointermove", onPointerMove);
   canvas.removeEventListener("pointerup", onPointerUp);
   sink.dispose(); pool?.dispose(); renderer.dispose();
-  bounds.clear(); props.clear();
-  trunkMaterial.dispose(); leafMaterial.dispose(); plantMaterial.dispose();
+  bounds.clear();
 }
 window.addEventListener("pagehide", dispose, { once: true });
 
