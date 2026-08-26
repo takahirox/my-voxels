@@ -19,10 +19,7 @@ import {
 } from "../../voxel-jobs/src/worker-entry.js";
 import { ChunkCandidate, VoxelStorage, type ChunkCoord, type ChunkSnapshot } from "../../voxel-storage/src/index.js";
 import type { VoxelMesh } from "../../voxel-mesher/src/index.js";
-import {
-  applySandboxEdgeTreatment, chunkKey, cloneMeshInputWire,
-  deterministicChunks, distanceFromCamera, parseSandboxConfig,
-} from "./config.js";
+import { chunkKey, cloneMeshInputWire, deterministicChunks, distanceFromCamera, parseSandboxConfig } from "./config.js";
 import { FrameSampler, average, formatCount, formatDuration } from "./stats.js";
 
 const byId = <T extends HTMLElement>(id: string): T => {
@@ -160,8 +157,7 @@ async function runPipeline(): Promise<void> {
       id, type: "terrain", revision: {}, visible: true, distance: distanceFromCamera(coord), downstream: 3,
       enqueuedAt: performance.now(), sequence: sequence++, input: { seed: config.seed.toString(), coord },
       commit: (result) => {
-        const blocks = applySandboxEdgeTreatment(result.coord, result.blocks);
-        const committed = storage.commit(new ChunkCandidate(result.coord, blocks));
+        const committed = storage.commit(new ChunkCandidate(result.coord, result.blocks));
         if (committed.status !== "committed") throw new Error(`${id} became stale`);
         expected.set(chunkKey(coord), committed.snapshot.revision);
         progress(`Terrain resident · ${expected.size} / 16 chunks`);
